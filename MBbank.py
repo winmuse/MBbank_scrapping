@@ -11,6 +11,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from winreg import *
+from PIL import Image
+from io import BytesIO
+import requests, json, base64
 
 class AutoDownloadMBbank:
     def __init__(self, user_name, pass_word):
@@ -91,7 +94,55 @@ class AutoDownloadMBbank:
         except Exception:
             print("can't find %s, try run javaScript" % id_btn)
 
+    def Recognition(self):
+        try:
+            img_auth = self.driver.find_element(By.XPATH, '/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[5]/mbb-word-captcha/div/div[2]/div[1]/div[1]/img')
+            location = img_auth.location
+            size = img_auth.size
+            
+            img = self.driver.get_screenshot_as_png()
 
+            left = location['x']
+            top = location['y']
+            right = location['x'] + size['width']
+            bottom = location['y'] + size['height']
+
+            im = Image.open(BytesIO(img))
+            im = im.crop((left, top, right, bottom)) # defines crop points
+            im.save('screenshot.png')
+
+            df = open('screenshot.png', 'rb').read()
+
+            imgStr = base64.b64encode(df).decode()
+
+            url = 'https://api.1stcaptcha.com/Recognition'
+            data = {
+                "Apikey": "df96cfbaada3488a977aa88df5c11b8d",
+                "Type": "imagetotext",
+                "Image": imgStr,
+            }
+            header = {
+                "Content-Type": "application/json"
+            }
+            req = requests.post(url, data=json.dumps(data), headers=header)
+            req_json = req.json()
+            print(req_json)
+
+            # text = json.loads(req_json)
+            print(req_json['TaskId'])
+
+            self.getresult(str(req_json['TaskId']))
+        except:
+            print("error")
+
+    def getresult(self, orderId):
+        url = 'https://api.1stcaptcha.com/getresult?apikey=df96cfbaada3488a977aa88df5c11b8d&taskid='+orderId
+        get_json = requests.get(url).json()
+        print(get_json['Data'])
+
+        image_auth = self.driver.find_element(By.XPATH,'/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[5]/mbb-word-captcha/div/div[2]/div[1]/div[2]/input')
+        image_auth.clear()
+        image_auth.send_keys(get_json['Data'])
     # Login to MBbank
     def loginMBbank(self):
         try:
@@ -101,6 +152,16 @@ class AutoDownloadMBbank:
             password = self.driver.find_element(By.ID, 'new-password')
             user.send_keys(self.user_name)
             password.send_keys(self.pass_word)
+            # '/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[5]/mbb-word-captcha/div/div[2]/div[1]/div[1]/img'
+            # '/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[5]/mbb-word-captcha/div/div[2]/div[1]/div[2]/input'
+            # '/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[6]/div/button'
+            self.Recognition()
+            
+            # if self.loadCompleted('/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[6]/div/button',20):
+            #     self.clickElement('/html/body/app-root/div/mbb-welcome/div[2]/div[1]/div/div/mbb-login/form/div/div[6]/div/button')
+
+            # if self.loadCompleted('/html/body/ngb-modal-window/div/div/ng-component/div/div[3]/div/div',20):
+            #     self.loginMBbank()
             
             first_login_element = 'MNU_GCME_040000'
             if self.loadCompletedID(first_login_element,2000):
